@@ -22,6 +22,6 @@ def combine_text_files(input_directory, output_file):
         print(f"Skipping non-text file: {file_name}")
 
 if __name__ == "__main__":
-  input_directory = "output"
-  output_file = "dna processed"
+  input_directory = "../parquet files"
+  output_file = "../outputs.txt"
   combine_text_files(input_directory, output_file)
