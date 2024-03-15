@@ -1,0 +1,4 @@
+# gitignore
+
+dna processed
+tokenizer/train_token.txt
