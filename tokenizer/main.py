@@ -1,10 +1,13 @@
 from tqdm import tqdm
 import json
+import os
+current_dir = os.path.dirname(os.path.realpath(__file__))
+os.chdir(current_dir)
 
 class DNAtokenizer:
   def __init__(self):
     super().__init__()
-    self.chars = ["\n", "A", "C", "G", "T"]
+    self.chars = ["\n", "A", "C", "G", "T", " "]
     self.vocab_size = len(self.chars)
     self.merges = {}
     self.vocab = {}
@@ -105,6 +108,7 @@ class DNAtokenizer:
   
   def save_model(self, model_prefix):
     model_file = model_prefix + '.model'
+
     with open(model_file, 'w', encoding='utf-8') as fwrite:
       for ids1, ids2 in self.merges:
         fwrite.write(f"{ids1} {ids2}\n")
