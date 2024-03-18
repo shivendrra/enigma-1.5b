@@ -4,6 +4,7 @@
 """
 
 import torch
+import numpy as np
 import os
 current_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(current_directory)
@@ -36,14 +37,14 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # hyperparams
 batch_size = 8
-block_size = 16
-max_iters = 100
-eval_interval = 10
-learning_rate = 2e-4
+block_size = 32
+max_iters = 1000
+eval_interval = 50
+learning_rate = 3e-4
 eval_iters = 5
-d_model = 128
-n_layer = 8
-n_head = 8
+d_model = 256
+n_layer = 16
+n_head = 12
 dropout = 0.2
 norm_eps = 1e-5
 
@@ -225,7 +226,7 @@ class Enigma(nn.Module):
     
     return logits, loss
   
-  def generate(self, idx, max_new_tokens, temperature=1.0, top_k=3, beam_width=5):
+  def complex_generate(self, idx, max_new_tokens, temperature=1.0, top_k=3, beam_width=5):
     beam = [(idx, 0)]  # start with the initial sequence and its log probability
     completed_beams = []
 
@@ -260,8 +261,8 @@ class Enigma(nn.Module):
         new_beam = sorted(new_beam, key=lambda x: x[1], reverse=True)
         beam = new_beam[:beam_width] # only top beams
 
-    completed_beams.extend(beam)
-    completed_beams = sorted(completed_beams, key=lambda x: x[1], reverse=True)
+    completed_beams.append(beam)
+    # completed_beams = list(sorted(completed_beams, key=lambda x: x[1], reverse=True))
 
     return completed_beams
 
@@ -270,6 +271,23 @@ class Enigma(nn.Module):
     min_value = values[:, -1].unsqueeze(-1).expand_as(logits)
     filtered_logits = torch.where(logits < min_value, torch.ones_like(logits) * -float('inf'), logits)
     return filtered_logits
+  
+  def generate(self, idx, max_new_tokens):
+    # idx is (B, T) array of indices in the current context
+    for _ in range(max_new_tokens):
+      # crop idx to the last block_size tokens
+      idx_cond = idx[:, -block_size:]
+      # get the predictions
+      logits, loss = self(idx_cond)
+      # focus only on the last time step
+      logits = logits[:, -1, :] # becomes (B, C)
+      # apply softmax to get probabilities
+      probs = F.softmax(logits, dim=-1) # (B, C)
+      # sample from the distribution
+      idx_next = torch.multinomial(probs, num_samples=1) # (B, 1)
+      # append sampled index to the running sequence
+      idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
+    return idx
 
 model = Enigma()
 m = model.to(device)
@@ -300,9 +318,12 @@ for iter in range(max_iters):
   loss.backward()
   optimizer.step()
 
+torch.save(model.state_dict(), f'enigma_{n_param:.0f}m.pth')
+
 target_text = "AGTTCTGCGAT"
 context = torch.tensor([encode(target_text)], dtype=torch.long, device=device)
-generated_output = decode(m.generate(context, max_new_tokens=10)[0])
+generated_output = decode(m.generate(context, max_new_tokens=10)[0].tolist())
+print(generated_output)
 
 import matplotlib.pyplot as plt
 
@@ -315,4 +336,3 @@ plt.ylabel('Loss')
 plt.legend()
 
 plt.show()
-print(generated_output)
