@@ -1,0 +1,13 @@
+{
+  "batch_size": 10,
+  "block_size": 64,
+  "max_iters": 5000,
+  "eval_interval": 50,
+  "learning_rate": 3e-4,
+  "eval_iters": 100,
+  "d_model": 512,
+  "n_head": 24,
+  "n_layer": 24,
+  "dropout": 0.2,
+  "norm_eps": 1e-5
+}
