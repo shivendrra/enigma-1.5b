@@ -38,8 +38,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # hyperparams
 batch_size = 8
 block_size = 32
-max_iters = 1000
-eval_interval = 50
+max_iters = 10
+eval_interval = 10
 learning_rate = 3e-4
 eval_iters = 5
 d_model = 256
@@ -226,68 +226,31 @@ class Enigma(nn.Module):
     
     return logits, loss
   
-  def complex_generate(self, idx, max_new_tokens, temperature=1.0, top_k=3, beam_width=5):
-    beam = [(idx, 0)]  # start with the initial sequence and its log probability
-    completed_beams = []
+  def generate(self, idx, max_new_tokens, temperature=1.0, top_k=0):
+    generated_tokens = []
 
     for _ in range(max_new_tokens):
-      new_beam = []
-        
-      for current_idx, log_prob in beam:
-        idx_cond = current_idx[:, -block_size:]
-        logits, _ = self(idx_cond)
-        logits = logits[:, -1, :]  # (B, C)
+      idx_cond = idx[:, -block_size:]
+      logits, _ = self(idx_cond)
+      logits = logits[:, -1, :]
 
-        # temperature scaling
-        scaled_logits = logits / temperature
+      scaled_logits = logits / temperature
+      if top_k > 0:
+        scaled_logits = self._top_k_filtering(scaled_logits, top_k)
 
-        # top-k sampling
-        if top_k > 0:
-          scaled_logits = self._top_k_filtering(scaled_logits, top_k)
+      probs = F.softmax(scaled_logits, dim=-1)
+      sampled_idx = torch.multinomial(probs, num_samples=1)
+      generated_tokens.append(sampled_idx.item())
+      idx = torch.cat((idx, sampled_idx), dim=1)
 
-        # softmax
-        probs = F.softmax(scaled_logits, dim=-1)  # (B, C)
+    return generated_tokens
 
-        # sample from the distribution
-        sampled_idx = torch.multinomial(probs, num_samples=beam_width)  # (B, beam_width)
-                
-        # expand the beam
-        for i in range(beam_width):
-          new_idx = torch.cat((current_idx, sampled_idx[:, i:i+1]), dim=1)
-          new_log_prob = log_prob + torch.log(probs[:, sampled_idx[:, i]])
-          new_beam.append((new_idx, new_log_prob.item()))
-
-        # sort new beam by log probabilities
-        new_beam = sorted(new_beam, key=lambda x: x[1], reverse=True)
-        beam = new_beam[:beam_width] # only top beams
-
-    completed_beams.append(beam)
-    # completed_beams = list(sorted(completed_beams, key=lambda x: x[1], reverse=True))
-
-    return completed_beams
 
   def _top_k_filtering(self, logits, top_k):
     values, indices = torch.topk(logits, top_k, dim=-1)
     min_value = values[:, -1].unsqueeze(-1).expand_as(logits)
     filtered_logits = torch.where(logits < min_value, torch.ones_like(logits) * -float('inf'), logits)
     return filtered_logits
-  
-  def generate(self, idx, max_new_tokens):
-    # idx is (B, T) array of indices in the current context
-    for _ in range(max_new_tokens):
-      # crop idx to the last block_size tokens
-      idx_cond = idx[:, -block_size:]
-      # get the predictions
-      logits, loss = self(idx_cond)
-      # focus only on the last time step
-      logits = logits[:, -1, :] # becomes (B, C)
-      # apply softmax to get probabilities
-      probs = F.softmax(logits, dim=-1) # (B, C)
-      # sample from the distribution
-      idx_next = torch.multinomial(probs, num_samples=1) # (B, 1)
-      # append sampled index to the running sequence
-      idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
-    return idx
 
 model = Enigma()
 m = model.to(device)
@@ -322,8 +285,8 @@ torch.save(model.state_dict(), f'enigma_{n_param:.0f}m.pth')
 
 target_text = "AGTTCTGCGAT"
 context = torch.tensor([encode(target_text)], dtype=torch.long, device=device)
-generated_output = decode(m.generate(context, max_new_tokens=10)[0].tolist())
-print(generated_output)
+generated_output = decode(m.generate(context, max_new_tokens=10, temperature=0.5, top_k=5))
+print(f"{target_text}{generated_output}")
 
 import matplotlib.pyplot as plt
 
