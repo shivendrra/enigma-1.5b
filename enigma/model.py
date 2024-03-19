@@ -12,7 +12,7 @@ os.chdir(current_directory)
 import torch.nn as nn
 from torch.nn import functional as F
 
-with open('/config_enigma.json', 'r', encoding='utf-8') as file:
+with open('config_enigma.json', 'r', encoding='utf-8') as file:
   params = json.load(file)
 
 batch_size = params['batch_size']
