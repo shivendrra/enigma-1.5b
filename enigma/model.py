@@ -25,8 +25,15 @@ norm_eps = params['norm_eps']
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class AttentionHead(nn.Module):
-  """ single head of self attention """
+  """
+    initialize a single head of self attention.
 
+    Args:
+    - d_model (int): dimensionality of the model's hidden layers
+    - head_size (int): dimensionality of each attention head
+    - dropout (float): dropout probability
+    - block_size (int): the maximum sequence length for positional encoding
+  """
   def __init__(self, d_model, head_size, dropout, block_size):
     super().__init__()
     self.key = nn.Linear(d_model, head_size, bias=True)
@@ -36,11 +43,21 @@ class AttentionHead(nn.Module):
     self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
 
   def forward(self, x, mask=False):
+    """
+    forward pass of a single attention head.
+
+    Args:
+      - x (Tensor): input tensor.
+      - mask (bool): flag indicating whether to apply masking
+
+    Returns:
+      - out (Tensor): output tensor after self attention
+    """
     B, T, C = x.shape
     key = self.key(x)
     query = self.query(x)
 
-    weights = query @ key.transpose(-2, -1) / (key.shape[-1]**-0.5)
+    weights = torch.matmul(query, key.transpose(-2, -1)) / (key.shape[-1]**-0.5)
 
     if mask is True:
       weights = weights.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
@@ -49,10 +66,19 @@ class AttentionHead(nn.Module):
     weights = self.dropout(weights)
 
     value = self.value(x)
-    out = weights @ value
+    out = torch.matmul(weights, value)
     return out
 
 class MultiHeadAttention(nn.Module):
+  """
+    initialize a multi-head attention module.
+
+    Args:
+    - d_model (int): dimensionality of the model's hidden layers
+    - n_head (int): no of attention heads
+    - dropout (float): dropout probability
+    - block_size (int): context length
+  """
   def __init__(self, d_model, n_head, dropout, block_size):
     head_size = d_model // n_head
     super().__init__()
@@ -61,24 +87,62 @@ class MultiHeadAttention(nn.Module):
     self.dropout = nn.Dropout(dropout)
 
   def forward(self, x, mask):
+    """
+    forward pass of the multi-head attention module
+
+    Args:
+      - x (Tensor): input tensor
+      - mask (bool): flag indicating whether to apply masking
+
+    Returns:
+      - out (Tensor): output tensor after multi-head attention
+
+    """
     out = torch.cat([h(x, mask=mask) for h in self.heads], dim=-1)
     out = self.dropout(self.proj(out))
     return out
 
 class FeedForward(nn.Module):
+  """
+    initialize a feedforward network module
+
+    Args:
+    - d_model (int): the dimensionality of the model's hidden layers
+    - dropout (float): dropout probability
+
+  """
   def __init__(self, d_model, dropout):
     super().__init__()
     self.net = nn.Sequential(
-      nn.Linear(d_model, 4*d_model),
+      nn.Linear(d_model, 5*d_model),
       nn.GELU(),
-      nn.Linear(4*d_model, d_model),
+      nn.Linear(5*d_model, d_model),
       nn.Dropout(dropout)
     )
 
   def forward(self, x):
+    """
+    forward pass of the feedforward network module
+
+    Args:
+      - x (Tensor): input tensor
+
+    Returns:
+      - out (Tensor): output tensor after passing through the feedforward network
+    """
     return self.net(x)
 
 class EncoderNetwork(nn.Module):
+  """
+    initialize an encoder network module
+
+    Args:
+    - d_model (int): dimensionality of the model's hidden layers
+    - n_head (int): no of attention heads in multi-head attention layers
+    - norm_eps (float): epsilon value for layer normalization
+    - dropout (float): dropout probability
+    - block_size (int): the maximum sequence length for positional encoding
+    """
   def __init__(self, d_model, n_head, norm_eps, dropout, block_size):
     super().__init__()
     self.s_att = MultiHeadAttention(n_head=n_head, d_model=d_model, dropout=dropout, block_size=block_size)
@@ -88,6 +152,15 @@ class EncoderNetwork(nn.Module):
     self.norm2 = nn.LayerNorm(d_model, eps=norm_eps)
 
   def forward(self, src):
+    """
+      forward pass of the encoder network module.
+    
+      Args:
+      - src (Tensor): input tensor representing source data
+
+      Returns:
+      - src (Tensor): output tensor after passing through the encoder network
+    """
     src2 = self.s_att(src, mask=False)
     src = src + self.dropout(src2)
     src = self.norm1(src)
@@ -99,6 +172,16 @@ class EncoderNetwork(nn.Module):
     return src
 
 class DecoderNetwork(nn.Module):
+  """
+    initialize a decoder network module
+
+    Args:
+      - d_model (int): dimensionality of the model's hidden layers
+      - n_head (int): no of attention heads in multi-head attention layers
+      - norm_eps (float): epsilon value for layer normalization
+      - dropout (float): dropout probability
+      - block_size (int): the maximum sequence length for positional encoding
+  """
   def __init__(self, d_model, n_head, norm_eps, dropout, block_size):
     super().__init__()
     self.s_att = MultiHeadAttention(n_head=n_head, d_model=d_model, dropout=dropout, block_size=block_size)
@@ -108,6 +191,16 @@ class DecoderNetwork(nn.Module):
     self.norm2 = nn.LayerNorm(d_model, eps=norm_eps)
 
   def forward(self, src, trg):
+    """
+      forward pass of the decoder network module.
+
+      Args:
+        - src (Tensor): input tensor representing source data
+        - trg (Tensor): input tensor representing target data
+
+      Returns:
+        - src_f (Tensor): output tensor after passing through the decoder network
+    """
     src2 = self.s_att(src, mask=True)
     src = src + self.dropout(src2)
     src = src + self.norm1(src)
@@ -124,6 +217,18 @@ class DecoderNetwork(nn.Module):
     return src_f
 
 class Transformer(nn.Module):
+  """
+    initialize a Transformer model
+
+    Args:
+      - vocab_size (int): size of the vocabulary
+      - d_model (int): dimensionality of the model's hidden layers
+      - block_size (int): maximum sequence length for positional encoding/context length
+      - n_layers (int): number of encoder and decoder layers in the Transformer
+      - n_head (int): number of attention heads in multi-head attention layers
+      - norm_eps (float): epsilon value for layer normalization
+      - dropout (float): dropout probability
+  """
   def __init__(self, vocab_size):
     super().__init__()
     self.toked_model = nn.Embedding(vocab_size, d_model)
@@ -137,6 +242,12 @@ class Transformer(nn.Module):
     self.apply(self._init_weights)
 
   def _init_weights(self, module):
+    """
+      initialize weights of linear and embedding layers
+
+      Args:
+        - module (nn.Module): the module to initialize weights for
+    """
     if isinstance(module, nn.Linear):
       torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
       if module.bias is not None:
@@ -145,6 +256,17 @@ class Transformer(nn.Module):
       torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
   def forward(self, idx, targets=None):
+    """
+      forward pass of the transformer model
+
+    Args:
+      - idx (Tensor): input tensor representing token indices
+      - targets (Tensor): target tensor for computing loss during training
+
+    Returns:
+      - logits (Tensor): output logits from the final linear layer
+      - loss (Tensor): optional. computed cross-entropy loss if targets are provided, else None
+    """
     B, T = idx.shape
 
     toked_model = self.toked_model(idx)
@@ -172,6 +294,18 @@ class Transformer(nn.Module):
     return logits, loss
 
   def generate(self, idx, max_new_tokens, temperature=1.0, top_k=0):
+    """
+      generate new tokens using the trained model
+
+    Args:
+      - idx (Tensor): input tensor representing initial token indices
+      - max_new_tokens (int): max no of new tokens to generate
+      - temperature (float): softmax temperature for sampling
+      - top_k (int): no of top tokens to consider in sampling
+
+    Returns:
+      - generated_tokens (list): list of generated token indices
+    """
     generated_tokens = []
 
     for _ in range(max_new_tokens):
@@ -191,6 +325,16 @@ class Transformer(nn.Module):
     return generated_tokens
 
   def _top_k_filtering(self, logits, top_k):
+    """
+      filter logits to keep only the top-k tokens
+
+    Args:
+      - logits (Tensor): input tensor representing unscaled logits
+      - top_k (int): no of top tokens to keep
+
+    Returns:
+      - filtered_logits (Tensor): filtered logits with only top-k tokens remaining
+    """
     values, indices = torch.topk(logits, top_k, dim=-1)
     min_value = values[:, -1].unsqueeze(-1).expand_as(logits)
     filtered_logits = torch.where(logits < min_value, torch.ones_like(logits) * -float('inf'), logits)
