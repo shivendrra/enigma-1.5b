@@ -1,6 +1,6 @@
 """
-  a transformer model with one masked and two un-masked attention layers
-  with the current configuration, it can reach 150million parameters
+  transformer based model, but with few minimal tweaks
+  trained a 150million parameters model with current set configurations
 """
 
 import torch
@@ -274,13 +274,13 @@ class Transformer(nn.Module):
     x = toked_model + pos_encod
 
     for layer in self.enc_layer:
-      x = layer(x)
+      x_out = layer(x)
 
     for layer in self.dec_layer:
-      x = layer(x, x)
+      x_final = layer(x, x_out)
 
-    x = self.norm_final(x)
-    logits = self.linear_final(x)
+    x_final = self.norm_final(x_final)
+    logits = self.linear_final(x_final)
 
     if targets is None:
       loss = None

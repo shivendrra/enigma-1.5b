@@ -1,4 +1,4 @@
-"""
+r"""
   - basic bpe-tokenizer that doesn't uses byte pairing, insted uses set of initial unique characters
     to train the new vocab
   - set of initial characters = ["\n", "A", "C", "G", "T", " "] that can be present in a file or are

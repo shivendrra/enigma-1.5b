@@ -7,8 +7,6 @@ class PerCharTokenizer:
     super().__init__()
     self.chars = ['\n', 'A', 'T', 'G', 'C', ' ']
     self.vocab_size = len(self.chars)
-    self.string_to_index = {}
-    self.index_to_string = {}
     self.string_to_index = {ch: i for i, ch in enumerate(self.chars)}
     self.index_to_string = {i: ch for i, ch in enumerate(self.chars)}
 
