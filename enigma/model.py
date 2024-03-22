@@ -114,9 +114,9 @@ class FeedForward(nn.Module):
   def __init__(self, d_model, dropout):
     super().__init__()
     self.net = nn.Sequential(
-      nn.Linear(d_model, 5*d_model),
+      nn.Linear(d_model, 10*d_model),
       nn.GELU(),
-      nn.Linear(5*d_model, d_model),
+      nn.Linear(10*d_model, d_model),
       nn.Dropout(dropout)
     )
 
@@ -190,27 +190,27 @@ class DecoderNetwork(nn.Module):
     self.norm1 = nn.LayerNorm(d_model, eps=norm_eps)
     self.norm2 = nn.LayerNorm(d_model, eps=norm_eps)
 
-  def forward(self, src, trg):
+  def forward(self, src, att):
     """
       forward pass of the decoder network module.
 
       Args:
-        - src (Tensor): input tensor representing source data
-        - trg (Tensor): input tensor representing target data
+        - src (Tensor): input tensor, same as the encoder's inputs
+        - trg (Tensor): encoder's attention matrix
 
       Returns:
-        - src_f (Tensor): output tensor after passing through the decoder network
+        - src_f (Tensor): final output tensor
     """
     src2 = self.s_att(src, mask=True)
     src = src + self.dropout(src2)
     src = src + self.norm1(src)
 
-    trg2 = self.s_att(trg, mask=False)
-    trg = trg + self.dropout(trg2)
-    trg = trg + self.norm1(trg)
+    att = src + att
+    att2 = self.s_att(att, mask=False)
+    att2 = att + self.dropout(att2)
+    trg = att2 + self.norm1(att2)
 
-    src_f = src + trg
-    src_f2 = self.ffwd(self.norm2(src_f))
+    src_f2 = self.ffwd(self.norm2(trg))
     src_f = src_f + self.dropout(src_f2)
     src_f = self.norm2(src_f)
 
