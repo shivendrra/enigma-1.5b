@@ -147,6 +147,6 @@ torch.save(model.state_dict(), f'enigma_{n_param:.0f}m.pth')
 ## Contribution
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 Please make sure to update tests as appropriate.
-For more info, follow [CONTRIBUTE.md]
+For more info, follow [CONTRIBUTE.md](https://github.com/shivendrra/enigma-1.5b/blob/main/CONTRIBUTING.md)
 ## License
 MIT
