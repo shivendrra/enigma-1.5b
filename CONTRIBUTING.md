@@ -23,7 +23,7 @@ To contribute to this project, you can follow these steps:
 
 ## Reporting Issues
 
-If you encounter any bugs, issues, or have feature requests, please open an issue on the GitHub repository. Provide as much detail as possible to help us understand and resolve the problem.
+If you encounter any bugs, issues, or have feature requests, please [open an issue](https://github.com/shivendrra/enigma-1.5b/tree/main/.github/ISSUE_TEMPLATE) on the GitHub repository. Provide as much detail as possible to help us understand and resolve the problem.
 
 ## Questions
 
