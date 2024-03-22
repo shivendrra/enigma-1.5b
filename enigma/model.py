@@ -1,6 +1,6 @@
 """
   transformer based model, but with few minimal tweaks
-  trained a 150million parameters model with current set configurations
+  trained a 2.5billion parameters model with current set configurations
 """
 
 import torch
@@ -42,7 +42,6 @@ class AttentionHead(nn.Module):
     self.dropout = nn.Dropout(dropout)
     self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
 
-    # Initialize relational positional embeddings
     self.rel_pos_emb = nn.Parameter(torch.randn(block_size, block_size, head_size))
 
   def forward(self, x, mask=False):
