@@ -6,7 +6,7 @@ Check out the model on huggingface: [enigma-1.5b](https://huggingface.co/Shivend
 It's a 2.5 parameter model trained on ~1billion individual letters of DNA, kinda like training a text-based model on per-character level instead of sub-word level. It does have it's own tokenizer similar that is intersection b/w char-level and bpe-tokenizer.
 ## Model Architecture:
 
-![[architecture.png]]
+![[architecture.png](https://github.com/shivendrra/enigma-1.5b/blob/main/architecture.png)]
 
 EnBERT is a 47million parameter model, follows BERT architecture, and has one more layer of masked self-attention layer to predict next tokens.
 Engima-2.5b is a transformer model. It has a fairly complex model.
