@@ -297,3 +297,92 @@ class Transformer(nn.Module):
       loss = F.cross_entropy(logits, targets)
 
     return logits, loss
+
+  def generate(self, idx, max_new_tokens, temperature=1.0, top_k=0):
+    """
+      generate new tokens using the trained model
+
+    Args:
+      - idx (Tensor): input tensor representing initial token indices
+      - max_new_tokens (int): max no of new tokens to generate
+      - temperature (float): softmax temperature for sampling
+      - top_k (int): no of top tokens to consider in sampling
+
+    Returns:
+      - generated_tokens (list): list of generated token indices
+    """
+    generated_tokens = []
+
+    for _ in range(max_new_tokens):
+      idx_cond = idx[:, -self.block_size:]
+      logits, _ = self(idx_cond)
+      logits = logits[:, -1, :]
+
+      scaled_logits = logits / temperature
+      if top_k > 0:
+        scaled_logits = self._top_k_filtering(scaled_logits, top_k)
+
+      probs = F.softmax(scaled_logits, dim=-1)
+      sampled_idx = torch.multinomial(probs, num_samples=1)
+      generated_tokens.append(sampled_idx.item())
+      idx = torch.cat((idx, sampled_idx), dim=1)
+
+    return generated_tokens
+  
+  def generate_masked_tokens(self, idx, masked_indices, temperature=1.0, top_k=0):
+    """
+      Generate predictions for masked tokens using the trained model.
+
+      Args:
+        - idx (Tensor): input tensor representing token indices
+        - masked_indices (Tensor): tensor of indices indicating masked positions
+        - temperature (float): softmax temperature for sampling
+        - top_k (int): no of top tokens to consider in sampling
+
+      Returns:
+        - predicted_tokens (Tensor): tensor of predicted token indices
+    """
+    B, T = idx.shape
+
+    toked_model = self.toked_model(idx)
+    pos_encod = self.pos_encod(torch.arange(T, device=device))
+    x = toked_model + pos_encod
+
+    for layer in self.enc_layer:
+      x_out = layer(x)
+
+    for layer in self.dec_layer:
+      x_final = layer(x, x_out)
+
+    x_masked = x_final.clone()
+    x_masked[masked_indices] = self.toked_model(torch.tensor([6], device=device))
+
+    x_masked = self.norm_final(x_masked)
+    logits = self.linear_final(x_masked)
+
+    masked_logits = logits[masked_indices].view(-1, logits.size(-1))
+    scaled_logits = masked_logits / temperature
+    if top_k > 0:
+      scaled_logits = self._top_k_filtering(scaled_logits, top_k)
+
+    probs = F.softmax(scaled_logits, dim=-1)
+    predicted_indices = torch.argmax(probs, dim=-1)
+
+    return predicted_indices
+  
+  def _top_k_filtering(self, logits, top_k):
+    """
+      filter logits to keep only the top-k tokens
+
+    Args:
+      - logits (Tensor): input tensor representing unscaled logits
+      - top_k (int): no of top tokens to keep
+
+    Returns:
+      - filtered_logits (Tensor): filtered logits with only top-k tokens remaining
+    """
+    values, indices = torch.topk(logits, top_k, dim=-1)
+    min_value = values[:, -1].unsqueeze(-1).expand_as(logits)
+    filtered_logits = torch.where(logits < min_value, torch.ones_like(logits) * -float('inf'), logits)
+
+    return filtered_logits
