@@ -42,6 +42,9 @@ class AttentionHead(nn.Module):
     self.dropout = nn.Dropout(dropout)
     self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
 
+    # Initialize relational positional embeddings
+    self.rel_pos_emb = nn.Parameter(torch.randn(block_size, block_size, head_size))
+
   def forward(self, x, mask=False):
     """
     forward pass of a single attention head.
@@ -56,13 +59,15 @@ class AttentionHead(nn.Module):
     B, T, C = x.shape
     key = self.key(x)
     query = self.query(x)
+    
+    scores = torch.matmul(query, key.transpose(-2, -1)) / (key.shape[-1] ** -0.5)
+    rel_pos_scores = torch.einsum('btc,tvc->btv', query, self.rel_pos_emb[:T, :T])
+    scores += rel_pos_scores
 
-    weights = torch.matmul(query, key.transpose(-2, -1)) / (key.shape[-1]**-0.5)
+    if mask:
+      scores = scores.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
 
-    if mask is True:
-      weights = weights.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
-
-    weights = F.softmax(weights, dim=-1)
+    weights = F.softmax(scores, dim=-1)
     weights = self.dropout(weights)
 
     value = self.value(x)
