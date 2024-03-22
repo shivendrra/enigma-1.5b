@@ -236,6 +236,7 @@ class Transformer(nn.Module):
   """
   def __init__(self, vocab_size):
     super().__init__()
+    self.block_size = block_size
     self.toked_model = nn.Embedding(vocab_size, d_model)
     self.pos_encod = nn.Embedding(block_size, d_model)
     self.enc_layer = nn.ModuleList([EncoderNetwork(n_head=n_head, norm_eps=norm_eps, block_size=block_size, dropout=dropout, d_model=d_model) for _ in range(n_layers)])
@@ -297,51 +298,3 @@ class Transformer(nn.Module):
       loss = F.cross_entropy(logits, targets)
 
     return logits, loss
-
-  def generate(self, idx, max_new_tokens, temperature=1.0, top_k=0):
-    """
-      generate new tokens using the trained model
-
-    Args:
-      - idx (Tensor): input tensor representing initial token indices
-      - max_new_tokens (int): max no of new tokens to generate
-      - temperature (float): softmax temperature for sampling
-      - top_k (int): no of top tokens to consider in sampling
-
-    Returns:
-      - generated_tokens (list): list of generated token indices
-    """
-    generated_tokens = []
-
-    for _ in range(max_new_tokens):
-      idx_cond = idx[:, -block_size:]
-      logits, _ = self(idx_cond)
-      logits = logits[:, -1, :]
-
-      scaled_logits = logits / temperature
-      if top_k > 0:
-        scaled_logits = self._top_k_filtering(scaled_logits, top_k)
-
-      probs = F.softmax(scaled_logits, dim=-1)
-      sampled_idx = torch.multinomial(probs, num_samples=1)
-      generated_tokens.append(sampled_idx.item())
-      idx = torch.cat((idx, sampled_idx), dim=1)
-
-    return generated_tokens
-
-  def _top_k_filtering(self, logits, top_k):
-    """
-      filter logits to keep only the top-k tokens
-
-    Args:
-      - logits (Tensor): input tensor representing unscaled logits
-      - top_k (int): no of top tokens to keep
-
-    Returns:
-      - filtered_logits (Tensor): filtered logits with only top-k tokens remaining
-    """
-    values, indices = torch.topk(logits, top_k, dim=-1)
-    min_value = values[:, -1].unsqueeze(-1).expand_as(logits)
-    filtered_logits = torch.where(logits < min_value, torch.ones_like(logits) * -float('inf'), logits)
-
-    return filtered_logits
