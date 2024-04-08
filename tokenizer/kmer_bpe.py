@@ -5,7 +5,7 @@ os.chdir(current_dir)
 from tqdm import tqdm
 import json
 
-class KMerTokenizer:
+class KmerPairTokenizer:
   def __init__(self):
     self.k_mers = 4
     self.vocab = {}
