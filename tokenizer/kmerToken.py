@@ -2,74 +2,136 @@ import os
 current_dir = os.path.dirname(os.path.realpath(__file__))
 os.chdir(current_dir)
 
-import json
-import collections
 from tqdm import tqdm
+import json
 
 class KMerTokenizer:
-    def __init__(self, k):
-        self.k = k
-        self.chars = ['\n', 'A', 'T', 'G', 'C', 'P', 'M', 'U', ' ']
-        self.vocab = {"\n": 1, "A": 2, "T": 3, "G": 4, "C": 5, "P": 6, "M": 7, "U": 8, " ": 9}
-        self.id_to_token = []
-        self.token_to_id = {}
+  def __init__(self, k_mers: int=5):
+    self.k_mers = k_mers
+    self.vocab = {}
+    self.merges = {}
+    self.vocab_size = 0
+    self.init_vocab = {"\n": 1, "A": 2, "T": 3, "G": 4, "C": 5, "P": 6, "M": 7, "U": 8, " ": 9}
+  
+  def _tokenize_seq(self, sequence):
+    kmers = [sequence[i:i+self.k_mers] for i in range(0, len(sequence), self.k_mers)]
+    return kmers
+  
+  def _get_stats(self, ids, counts=None):
+    """
+      takes list of integers and returns dictionary of counts of pairs(consecutive ones)
+      eg: [1, 2, 3, 1, 2] -> {(1, 2): 2, (2, 3): 1, (3, 1): 1}
+      allows to update an existing dictionary of counts
+    """
+    counts = {} if counts is None else counts
+    for pair in zip(ids, ids[1:]):
+      counts[pair] = counts.get(pair, 0) + 1
+    return counts
 
-    def tokenize_sequence(self, sequence):
-        kmers = [sequence[i:i+self.k] for i in range(0, len(sequence), self.k)]
-        return kmers
+  def _merge(self, ids, pair, idx):
+    """
+      in the list of integers, replaces all consecutive pair with the new integer token idx
+      eg: ids=[1, 2, 3, 1, 2], pair=(1, 2), idx=4 -> [4, 3, 4]
+    """
+    new_ids = []
+    i = 0
+    while i < len(ids):
+      if i+1 < len(ids) and ids[i] == pair[0] and ids[i+1] == pair[1]:
+        new_ids.append(idx)
+        i += 2
+      else:
+        new_ids.append(ids[i])
+        i += 1
+    return new_ids
+  
+  def get_ids(self, data):
+    all_kmers = []
+    seq_to_no = {}
+    ass_no = []
+    i = 1
+    for seq in data:
+      all_kmers.extend(self._tokenize_seq(seq))
 
-    def build_vocab(self, sequences):
-        all_kmers = []
-        for sequence in sequences:
-            all_kmers.extend(self.tokenize_sequence(sequence))
-        token_count = {}
-        for kmer in all_kmers:
-            if kmer in token_count:
-                token_count[kmer] += 1
-            else:
-                token_count[kmer] = 1
-        sorted_tokens = sorted(token_count.items(), key=lambda x: x[1], reverse=True)
-        for token, _ in sorted_tokens:
-            self.token_to_id[token] = len(self.token_to_id)
-            self.id_to_token.append(token)
-        self.vocab = self.token_to_id
+    for seq in all_kmers:
+      if seq not in seq_to_no:
+        seq_to_no[seq] = i
+        i += 1
+      ass_no.append(seq_to_no[seq])
+    
+    del all_kmers, i
+    return ass_no, seq_to_no
 
-    def train(self, corpus, max_merge_operations):
-        for _ in tqdm(range(max_merge_operations), desc='Training the tokenizer\t'):
-            token_counts = collections.Counter()
-            for sequence in corpus:
-                kmers = self.tokenize_sequence(sequence)
-                token_counts.update(kmers)
-            most_common_pair = max(token_counts.items(), key=lambda x: x[1])[0]
-            self.vocab[''.join(most_common_pair)] = len(self.vocab)
-            self._update_token_mappings()
+  def train_tokenizer(self, data: str, max_vocab: int):
+    n_merges = max_vocab
+    text_pairs, init_vocab = self.get_ids([data])
+    ids = list(text_pairs)
 
-    def encode_sequence(self, sequence):
-        encoded_sequence = []
-        kmers = self.tokenize_sequence(sequence)
-        for kmer in kmers:
-            if kmer in self.token_to_id:
-                encoded_sequence.append(self.token_to_id[kmer])
-            else:
-                encoded_sequence.append(len(self.vocab))
-        return encoded_sequence
+    del text_pairs, max_vocab
+    merges = {}
+    ids_len = len(init_vocab)
 
-    def decode_sequence(self, encoded_sequence):
-        decoded_sequence = ''.join([self.id_to_token[token_id] for token_id in encoded_sequence])
-        return decoded_sequence
+    for i in tqdm(range(n_merges), desc="training the tokenizer"):
+      stats = self._get_stats(ids)
+      pair = max(stats, key=stats.get)
+      idx = ids_len + i + 1
+      ids = self._merge(ids, pair, idx)
+      merges[pair] = idx
 
-    def _update_token_mappings(self):
-        self.id_to_token = [token for token, _ in sorted(self.vocab.items(), key=lambda x: x[1])]
-        self.token_to_id = {token: i for i, token in enumerate(self.id_to_token)}
+    vocab = {value: key for key, value in init_vocab.items()}    
+    for (p0, p1), idx in merges.items():
+      vocab[idx] = vocab[p0] + vocab[p1]
 
-    def save_vocab(self, filename):
-        with open(filename, 'w') as file:
-            json.dump(self.vocab, file)
+    self.vocab = vocab
+    self.merges = merges
+    self.vocab_size = len(self.vocab)
 
-    def load_vocab(self, vocab_file):
-        with open(vocab_file, 'r') as f:
-            vocab_data = json.load(f)
+    del vocab, merges, ids, stats, pair, idx
+  
+  def encode(self, text):
+    text_pairs, _ = self.get_ids([text])
+    ids = list(text_pairs)
 
-        self.vocab = vocab_data
-        self.token_to_id = {token: i for i, token in enumerate(self.vocab)}
-        self.id_to_token = {i: token for token, i in self.token_to_id.items()}
+    while len(ids) >= 2:
+      stats = self._get_stats(ids)
+      pair = min(stats, key=lambda p: self.merges.get(p, float('inf')))
+      if pair not in self.merges:
+        break
+      idx = self.merges[pair]
+      ids = self._merge(ids, pair, idx)
+    
+    return ids
+
+  def decode(self, ids):
+    tokens = [self.vocab[idx] for idx in ids]
+    sequence = ''.join(tokens)
+    return sequence
+  
+  def save_model(self, file_path):
+    model_file = file_path + f"/dna_{self.k_mers}-mer.model"
+    vocab_file = file_path + f"/dna_{self.k_mers}-mer.json"
+
+    with open(model_file, 'w', encoding='utf-8') as f:
+      for ids1, ids2 in self.merges:
+        f.write(f"{ids1} {ids2}\n")
+    with open(vocab_file, 'w') as f:
+      json.dump(self.vocab, f)
+    print('model file saved successfully!')
+  
+  def load(self, model_path, vocab_path):
+    assert model_path.endswith('.model')
+    assert vocab_path.endswith('.json')
+
+    with open(vocab_path, 'r') as f:
+      vocab_data = json.load(f)
+      
+    self.vocab = vocab_data
+    self.vocab_size = len(vocab_data)
+
+    merges = {}
+    idx = 256 + 1
+    with open(model_path, 'r', encoding='utf-8') as fread:
+      for line in fread:
+        idx1, idx2 = map(int, line.split())
+        merges[(idx1, idx2)] = idx
+        idx += 1
+    self.merges = merges
