@@ -25,7 +25,7 @@ Follow these steps to train your own tokenizer or generate outputs from the trai
 	3. Train and Save the model. Have fun!!
 
 ## Model Architecture:
-![[architecture.png]]
+![architecture.png](https://github.com/shivendrra/enigma-1.5b/blob/main/architecture.png)
 
 EnBERT is a 47million model, follows decoder-only architecture, whereas Engima-2.5b is a transformer model. It has a fairly complex model.
 ### Highlights
