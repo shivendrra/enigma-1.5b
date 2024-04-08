@@ -4,6 +4,7 @@ os.chdir(current_dir)
 
 from tqdm import tqdm
 import json
+from multiprocessing import Pool
 
 class KMerTokenizer:
   def __init__(self):
@@ -87,21 +88,34 @@ class KMerTokenizer:
 
     del vocab, merges, ids, stats, pair, idx
   
-  def encode(self, text):
+  def encode(self, text, batch_size=10000, num_processes=10):
     text_pairs, _ = self.get_ids([text])
     ids = list(text_pairs)
-    total_pairs = len(ids) - 1
 
-    with tqdm(total=total_pairs, desc="Encoding text") as pbar:
-      while len(ids) >= 2:
-        stats = self._get_stats(ids)
-        pair = min(stats, key=lambda p: self.merges.get(p, float('inf')))
-        if pair not in self.merges:
-          break
-        idx = self.merges[pair]
-        ids = self._merge(ids, pair, idx)
-        pbar.update(1)
-    return ids
+    batches = [ids[i:i+batch_size] for i in range(0, len(ids), batch_size)]
+
+    with tqdm(batches, desc="encoding batches"):
+      with Pool(num_processes) as pool:
+        encoded_batches = [item for sublist in encoded_batches for item in sublist]
+    
+    # def encode_batch(batch):
+    #   encoded_batch = []
+    #   while len(batch) >= 2:
+    #     stats = self._get_stats(batch)
+    #     pair = min(stats, key=lambda p: self.merges.get(p, float('inf')))
+    #     if pair not in self.merges:
+    #       break
+    #     idx = self.merges[pair]
+    #     batch = self._merge(batch, pair, idx)
+    #     encoded_batch.extend(batch[:-1])
+    #     batch = [batch[-1]]
+    #   return encoded_batch
+
+    # with Pool(num_processes) as pool:
+    #   encoded_batches = list(tqdm(pool.imap(encode_batch, batches), total=len(batches), desc="Encoding text"))
+
+    # encoded_ids = [item for sublist in encoded_batches for item in sublist]
+    # return encoded_ids
 
   def decode(self, ids):
     tokens = [self.vocab[idx] for idx in ids]
@@ -109,8 +123,8 @@ class KMerTokenizer:
     return sequence
   
   def save_model(self, file_path):
-    model_file = file_path + f"/base_mer.model"
-    vocab_file = file_path + f"/base_kmer.json"
+    model_file = file_path + f"/base_4mer.model"
+    vocab_file = file_path + f"/base_4mer.json"
 
     with open(model_file, 'w', encoding='utf-8') as f:
       for ids1, ids2 in self.merges:
