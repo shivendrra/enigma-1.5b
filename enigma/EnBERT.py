@@ -1,155 +1,141 @@
 """
-  simple BERT architecture model, paired with one more layer of 
-  masked self-attention, to predict next token
+  this isn't a bert based model, i just liked the name and named it
+  --> decoder-only model, uses RMS normalization and GELU activation function
+  --> one masked-attention and other unmasked
+  --> attention layers have relational positional-embeddings
 """
 
-import torch
-import os
-current_directory = os.path.dirname(os.path.abspath(__file__))
-os.chdir(current_directory)
+import json
+with open('config.json', 'r', encoding='utf-8') as file:
+  params = json.load(file)
 
+# required parameters
+block_size = params['block_size']
+d_model = params['d_model']
+n_head = params['n_heads']
+n_layers = params['n_layers']
+learning_rate = params['learning_rate']
+dropout = params['dropout']
+norm_eps = params['norm_eps']
+
+import torch
 import torch.nn as nn
 from torch.nn import functional as F
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# hyperparams
-batch_size = 8
-block_size = 32
-max_iters = 10
-eval_interval = 10
-learning_rate = 3e-4
-eval_iters = 5
-d_model = 256
-n_layer = 16
-n_head = 12
-dropout = 0.2
-norm_eps = 1e-5
-
-class SWiGLU(nn.Module):
-  """ SWiGLU(x) = σ(x) ⊙ ReLU(x) + (1−σ(x)) ⊙ x """
-
-  def forward(self, x):
-    sigmoid_output = torch.sigmoid(x)
-    relu_output = F.relu(x)
-    out = sigmoid_output * relu_output + (1 - sigmoid_output) * x
-    
-    return out
-
-class UnMaskedHead(nn.Module):
-  """ single head of self attention """
-  def __init__(self, d_model, head_size, dropout):
+class RMSNorm(nn.Module):
+  def __init__(self, dim: int, eps: float = 1e-6):
     super().__init__()
-    self.key = nn.Linear(d_model, head_size, bias=True)
-    self.query = nn.Linear(d_model, head_size, bias=True) 
-    self.value = nn.Linear(d_model, head_size, bias=True)
-    self.dropout = nn.Dropout(dropout)
-  
+    self.eps = eps
+    self.weight = nn.Parameter(torch.ones(dim))
+    
+  def _norm(self, x):
+    return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
   def forward(self, x):
-    B, T, C = x.shape
-    key = self.key(x)
-    query = self.query(x)
+    output = self._norm(x.float()).type_as(x)
+    return output * self.weight
 
-    weights = query @ key.transpose(-2, -1) * key.shape[-1]**-0.5
-    weights = F.softmax(weights, dim=-1)
-    weights = self.dropout(weights)
-
-    value = self.value(x)
-    out = weights @ value
-    return out
-
-class MaskedHead(nn.Module):
-  """ one head of self-attention """
-  def __init__(self, head_size, dropout, d_model):
+class SingleHead(nn.Module):
+  def __init__(self,
+      head_size: int,
+      d_model: int,
+      block_size: int,
+      dropout: float):
     super().__init__()
     self.key = nn.Linear(d_model, head_size, bias=True)
     self.query = nn.Linear(d_model, head_size, bias=True)
     self.value = nn.Linear(d_model, head_size, bias=True)
+    self.dropout = nn.Dropout(dropout)
+    self.rel_pos_embd = nn.Parameter(torch.randn(block_size, block_size, head_size))
     self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
-
-    self.dropout = nn.Dropout(dropout)
-
-  def forward(self, x):
-    B,T,C = x.shape
-    k = self.key(x)
-    q = self.query(x)
-    
-    wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # (B, T, hs) @ (B, hs, T) -> (B, T, T)
-    wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
-    wei = F.softmax(wei, dim=-1) # (B, T, T)
-    wei = self.dropout(wei)
-    
-    v = self.value(x)
-    out = wei @ v
-    return out
   
-class MultiUnMasked(nn.Module):
-  def __init__(self, d_model, n_head, dropout):
+  def forward(self, x: torch.Tensor, mask: bool= False):
+    B, T, C = x.shape
+    key = self.key(x)
+    query = self.query(x)
+    scores = torch.matmul(query ,key.transpose(-2, -1)) / (key.shape[-1]**-0.5)
+
+    if mask is True:
+      scores = scores.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+
+    rel_pos_scores = torch.einsum('btc,tvc->btv', query, self.rel_pos_embd[:T, :T])
+    scores = scores + rel_pos_scores
+
+    att_mat = F.softmax(scores, dim=-1)
+    att_mat = self.dropout(att_mat)
+    value = self.value(x)
+    output = torch.matmul(att_mat, value)
+    return output
+
+class MultiHeadAttention(nn.Module):
+  def __init__(self,
+      d_model: int,
+      block_size: int,
+      n_head : int,
+      dropout: float):
     head_size = d_model // n_head
     super().__init__()
-    self.heads = nn.ModuleList([UnMaskedHead(d_model=d_model, dropout=dropout, head_size=head_size) for _ in range(n_head)])
-    self.proj = nn.Linear(n_head * head_size, d_model)
+    self.heads = nn.ModuleList([SingleHead(d_model=d_model, dropout=dropout, block_size=block_size, head_size=head_size) for _ in range(n_head)])
+    self.projection = nn.Linear(d_model, d_model)
     self.dropout = nn.Dropout(dropout)
   
-  def forward(self, x):
-    out = torch.cat([h(x) for h in self.heads], dim=-1)
-    out = self.dropout(self.proj(out))
-    return out
-
-class MultiMasked(nn.Module):
-  def __init__(self, d_model, n_head, dropout):
-    head_size = d_model // n_head
-    super().__init__()
-    self.heads = nn.ModuleList([MaskedHead(d_model=d_model, dropout=dropout, head_size=head_size) for _ in range(n_head)])
-    self.proj = nn.Linear(n_head * head_size, d_model)
-    self.dropout = nn.Dropout(dropout)
-  
-  def forward(self, x):
-    out = torch.cat([h(x) for h in self.heads], dim=-1)
-    out = self.dropout(self.proj(out))
+  def forward(self, x: torch.Tensor, mask: bool):
+    out = torch.cat([h(x, mask) for h in self.heads], dim=-1)
+    out = self.dropout(self.projection(out))
     return out
 
 class FeedForward(nn.Module):
   def __init__(self, d_model, dropout):
     super().__init__()
     self.net = nn.Sequential(
-      nn.Linear(d_model, 4*d_model),
+      nn.Linear(d_model, 5 * d_model),
       nn.GELU(),
-      nn.Linear(4*d_model, d_model),
-      nn.Dropout(dropout)
-    )
-   
-  def forward(self, x):
+      nn.Linear(5 * d_model, d_model),
+      nn.Dropout(dropout),
+      )
+
+  def forward(self, x: torch.Tensor):
     return self.net(x)
 
-class Block(nn.Module):
-  def __init__(self, d_model, n_head, norm_eps, dropout):
+class DecoderBlock(nn.Module):
+  def __init__(self, d_model: int,
+        block_size: int,
+        n_head: int,
+        norm_eps: float,
+        dropout: float):
     super().__init__()
-    self.sa_masked = MultiMasked(n_head=n_head, d_model=d_model, dropout=dropout)
-    self.sa_unmasked = MultiUnMasked(n_head=n_head, d_model=d_model, dropout=dropout)
-    self.ffwd = FeedForward(d_model, dropout=dropout)
-    self.norm1 = nn.LayerNorm(d_model, eps=norm_eps)
-    self.norm2 = nn.LayerNorm(d_model, eps=norm_eps)
+    self.self_att = MultiHeadAttention(n_head=n_head, d_model=d_model, dropout=dropout, block_size=block_size)
+    self.ffwd = FeedForward(d_model, dropout)
+    self.dropout = nn.Dropout(dropout)
+    self.norm = RMSNorm(d_model, eps=norm_eps)
   
-  def forward(self, x):
-    x2 = x + self.sa_unmasked(self.norm1(x))
-    x = x2 + self.norm2(self.ffwd(x2))
+  def forward(self, x: torch.Tensor):
+    x_out = self.self_att(self.norm(x), mask=True)
+    x_out = x + self.dropout(x_out)
+    del x
 
-    x2 = x + self.sa_masked(self.norm1(x))
-    x = x2 + self.norm2(self.ffwd(x2))
-    return x
+    x = self.self_att(self.norm(x_out, mask=False))
+    x = x_out + self.dropout(x)
+    del x_out
 
-class EnigmaBERT(nn.Module):
-  def __init__(self, vocab_size):
+    x_out = self.ffwd(self.norm(x))
+    x_out = x + self.dropout(x_out)
+    del x
+    
+    return x_out
+
+class Transformer(nn.Module):
+  def __init__(self, vocab_size: int):
     super().__init__()
-    self.toked_model = nn.Embedding(vocab_size, d_model)
-    self.pos_encod = nn.Embedding(block_size, d_model)
-    self.block = nn.Sequential(*[Block(d_model=d_model, dropout=dropout, norm_eps=norm_eps, n_head=n_head) for _ in range(n_layer)])
-    self.norm_final = nn.LayerNorm(d_model, eps=norm_eps)
+    self.block_size = block_size
+    self.token_embeddings = nn.Embedding(vocab_size, d_model)
+    self.decoder = nn.Sequential(*[DecoderBlock(n_head=n_head, d_model=d_model, dropout=dropout, norm_eps=norm_eps, block_size=block_size) for _ in range(n_layers)])
+    self.norm_final = RMSNorm(d_model, eps=norm_eps)
     self.linear_final = nn.Linear(d_model, vocab_size)
+    self.dropout = nn.Dropout(dropout)
     self.apply(self._init_weights)
   
-
   def _init_weights(self, module):
     if isinstance(module, nn.Linear):
       torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
@@ -160,47 +146,27 @@ class EnigmaBERT(nn.Module):
     
   def forward(self, idx, targets=None):
     B, T = idx.shape
-
-    toked_model = self.toked_model(idx)
-    pos_encod = self.pos_encod(torch.arange(T, device=device))
-    x = toked_model + pos_encod
-    x = self.block(x)
-    x = self.norm_final(x)
-    logits = self.linear_final(x)
+    x = self.token_embeddings(idx)
+    x = self.decoder(x)
+    logits = self.linear_final(self.norm_final(x))
 
     if targets is None:
       loss = None
-    
+
     else:
       B, T, C = logits.shape
       logits = logits.view(B*T, C)
       targets = targets.view(B*T)
       loss = F.cross_entropy(logits, targets)
-    
+
     return logits, loss
-  
-  def generate(self, idx, max_new_tokens, temperature=1.0, top_k=0):
-    generated_tokens = []
 
-    for _ in range(max_new_tokens):
-      idx_cond = idx[:, -block_size:]
-      logits, _ = self(idx_cond)
+  def generate(self, idx: torch.Tensor, max_token: int=10):
+    for _ in range(max_token):
+      idx_cond = idx[:, -self.block_size:]
+      logits = self(idx_cond)
       logits = logits[:, -1, :]
-
-      scaled_logits = logits / temperature
-      if top_k > 0:
-        scaled_logits = self._top_k_filtering(scaled_logits, top_k)
-
-      probs = F.softmax(scaled_logits, dim=-1)
-      sampled_idx = torch.multinomial(probs, num_samples=1)
-      generated_tokens.append(sampled_idx.item())
-      idx = torch.cat((idx, sampled_idx), dim=1)
-
-    return generated_tokens
-
-
-  def _top_k_filtering(self, logits, top_k):
-    values, indices = torch.topk(logits, top_k, dim=-1)
-    min_value = values[:, -1].unsqueeze(-1).expand_as(logits)
-    filtered_logits = torch.where(logits < min_value, torch.ones_like(logits) * -float('inf'), logits)
-    return filtered_logits
+      probs = F.softmax(logits, dim=-1)
+      idx_next = torch.argmax(probs, dim=-1)
+      idx = torch.cat((idx, idx_next), dim=1)
+    return idx
