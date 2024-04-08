@@ -10,17 +10,18 @@ with open('../parquet files/extra.txt', 'r', encoding='utf-8') as f:
 
 tokenizer = KMerTokenizer(k_mers=5)
 tokenizer.build_vocab([train_data])
-tokenizer.save_model('trained models')
+tokenizer.save_model('../tokenizer/trained models')
 
 with open('../parquet files/train.txt', 'r', encoding='utf-8') as f:
   test_data = f.read()
   print("file opened!")
 
+tokenizer.load_model('../tokenizer/trained models/base_5k.json')
+
 encoded_tokens = tokenizer.encode(test_data)
 decoded_tokens = tokenizer.decode(encoded_tokens)
-# print(encoded_tokens)
-# print(decoded_tokens)
-
+print(encoded_tokens)
+print(decoded_tokens)
 
 print(f"seq length: {len(test_data)} \ntokens length: {len(decoded_tokens)}")
 print(test_data == decoded_tokens)

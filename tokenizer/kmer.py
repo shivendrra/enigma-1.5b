@@ -1,8 +1,6 @@
 import os
 from tqdm import tqdm
 import json
-current_dir = os.path.dirname(os.path.realpath(__file__))
-os.chdir(current_dir)
 
 class KMerTokenizer:
   def __init__(self, k_mers):
@@ -56,22 +54,5 @@ class KMerTokenizer:
       vocab = json.load(f)
     
     self.vocab = vocab
+    self.token_to_id = self.vocab
     self.vocab_size = len(vocab)
-
-with open('../parquet files/extra.txt', 'r', encoding='utf-8') as f:
-  train_data = f.read()
-  print("file opened!")
-
-tokenizer = KMerTokenizer(k_mers=5)
-tokenizer.build_vocab([train_data])
-# tokenizer.save_model('trained models')
-tokenizer.load_model('trained models/base_5k.json')
-
-with open('../parquet files/train.txt', 'r', encoding='utf-8') as f:
-  test_data = f.read()
-  print("file opened!")
-
-encoded_sequence = tokenizer.encode(test_data)
-print(encoded_sequence[:100])
-decoded_sequence = tokenizer.decode(encoded_sequence)
-print("working fine:", decoded_sequence == test_data)
