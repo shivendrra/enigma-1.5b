@@ -4,6 +4,7 @@ os.chdir(current_dir)
 
 import json
 import collections
+from tqdm import tqdm
 
 class KMerTokenizer:
     def __init__(self, k):
@@ -34,7 +35,7 @@ class KMerTokenizer:
         self.vocab = self.token_to_id
 
     def train(self, corpus, max_merge_operations):
-        for _ in range(max_merge_operations):
+        for _ in tqdm(range(max_merge_operations), desc='Training the tokenizer\t'):
             token_counts = collections.Counter()
             for sequence in corpus:
                 kmers = self.tokenize_sequence(sequence)
