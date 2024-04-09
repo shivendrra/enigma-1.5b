@@ -161,12 +161,21 @@ class Transformer(nn.Module):
 
     return logits, loss
 
-  def generate(self, idx: torch.Tensor, max_token: int=10):
-    for _ in range(max_token):
-      idx_cond = idx[:, -self.block_size:]
-      logits = self(idx_cond)
-      logits = logits[:, -1, :]
+  @torch.no_grad()
+  def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
+    self.eval()
+    for _ in range(max_new_tokens):
+    
+      idx_cond = idx if idx.size(1) <= self.block_size else idx[:, -self.block_size:]
+      logits, _ = self(idx_cond)
+      logits = logits[:, -1, :] / temperature
+    
+      if top_k is not None:
+        v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+        logits[logits < v[:, [-1]]] = -float('Inf')
+      
       probs = F.softmax(logits, dim=-1)
-      idx_next = torch.argmax(probs, dim=-1)
+      idx_next = torch.multinomial(probs, num_samples=1)
       idx = torch.cat((idx, idx_next), dim=1)
-    return idx
+
+      return idx
