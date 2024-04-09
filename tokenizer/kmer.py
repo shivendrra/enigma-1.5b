@@ -3,7 +3,7 @@ from tqdm import tqdm
 import json
 
 class KMerTokenizer:
-  def __init__(self, k_mers):
+  def __init__(self, k_mers: int=4):
     self.k_mers = k_mers
     self.vocab = {}
     self.id_to_token = []

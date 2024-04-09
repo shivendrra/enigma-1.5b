@@ -37,30 +37,24 @@ EnBERT is a 47million model, follows decoder-only architecture, whereas Engima-2
 5. **Generation:** Token generation is very simple, passes context-tokens into the model, gets processed and then it just gives out some probabilities of values which are filtered using `argmax` function.
 
 ## Tokenizer:
-It uses blend of basic character level tokenization and bpe-tokenization process. Initial vocab is defined already. 'P', 'M', 'U' are padding, mask and unknown tokens representation, respectively.
+Let's say we have a long sequence of DNA. This tokenizer splits that sequence into sections of consecutively occurring bases, and each section has length of value equal to `k_mer` which is by default set to 4.
+`build_vocab()` function then builds a vocab out of all tokenized sequences by storing them into a new dictionary, seq as key and index as value. And finally, you can save the generated vocab using `save_model()` function and can be loaded later for use.
 ```python
-chars = ['\n', 'A', 'T', 'G', 'C', 'P', 'M', 'U', ' ']
+tokenizer.load_model('../tokenizer/trained models/base_5k.json')
 ```
-Then it uses the same process as bpe to build new vocab by merging max pairs in each iterations. This tokenizer is trained till 1.5k vocab size, already, and it can be loaded for later use.
-
-*One issue that I've encountered is that it is pretty slow while tokenizing files, that's why it isn't used in the model while training.*
-
-Here is how you can use it:
+I used this tokenizer to train decoder-only model, here is how to use it:
 ```python
-from tokenizer import DNAtokenizer
-token = DNAtokenizer()
+from tokenizer import KMerTokenizer
 
-# for training tokenizer
-token.train(data, 250)
-token.save_model(model_prefix=model_prefix)
+tokenizer = KMerTokenizer(k_mers=5)
+tokenizer.build_vocab([train_data])
+tokenizer.save_model('../tokenizer/trained models')
 
-# for loading save vocab
-token.load_model(model_path='../tokenizer/trained models/base_1k.model')
-
-sample = "ATTGCTA"
-encoded_tokens = token.encode(sample)
-decoded_tokens = token.decode(encoded_tokens)
+encoded_tokens = tokenizer.encode(test_data)
+decoded_tokens = tokenizer.decode(encoded_tokens)
 ```
+
+Read more about tokenizers in: [tokenizer.md](https://github.com/shivendrra/enigma-1.5b/tokenizer/tokenizer.md)
 
 ## How it works?
 Let's take a sample input of DNA seq: `"AGTTCTGCGAT"`, we feed it into the train model, and it will generate the next few letters of DNA, limit is 256 for now. Generate function uses `top_k` sampling and `temperature` setting. Use `enigma/generate.py` to generate outputs from the model.
