@@ -6,8 +6,8 @@ import pandas as pd
 current_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(current_directory)
 
-input_directory = 'parquetfile'
-output_directory = 'output'
+input_directory = '../parquet files'
+output_directory = '../parquet files/output'
 
 if not os.path.exists(output_directory):
   os.makedirs(output_directory)
