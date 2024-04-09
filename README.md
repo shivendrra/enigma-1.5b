@@ -54,7 +54,7 @@ encoded_tokens = tokenizer.encode(test_data)
 decoded_tokens = tokenizer.decode(encoded_tokens)
 ```
 
-Read more about tokenizers in: [tokenizer.md](https://github.com/shivendrra/enigma-1.5b/tokenizer/tokenizer.md)
+Read more about tokenizers in: [tokenizer.md](https://github.com/shivendrra/enigma-1.5b/blob/main/tokenizer/tokenizer.md)
 
 ## How it works?
 Let's take a sample input of DNA seq: `"AGTTCTGCGAT"`, we feed it into the train model, and it will generate the next few letters of DNA, limit is 256 for now. Generate function uses `top_k` sampling and `temperature` setting. Use `enigma/generate.py` to generate outputs from the model.
