@@ -4,7 +4,7 @@ Check out the model on huggingface: [enigma-1.5b](https://huggingface.co/Shivend
 
 ## Overview
 It's a 2.5b model trained on ~1billion individual letters of DNA, kinda like training a text-based model on per-character level instead of sub-word level. It does have it's own tokenizer similar that is intersection b/w char-level and bpe-tokenizer.
-For EnBERT i.e. decoder-only model is trained on lot's of sequences of DNA tokenized using `k-mer` tokenizer specially trained for this purpose, which means it has a larger vocab size than the enigma-2.5b.
+For EnBERT i.e. decoder-only model is trained on lot's of sequences of DNA tokenized using `k-mer` tokenizer specially trained for this purpose, which means it has a larger vocab size than the enigma-2.5b. Same model architecture is used in training a 430m model that is per-char based same as 2.5b model, but it's better than that.
 
 ## How to use:
 Follow these steps to train your own tokenizer or generate outputs from the trained model:
