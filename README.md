@@ -27,9 +27,8 @@ Follow these steps to train your own tokenizer or generate outputs from the trai
 ## Model Architecture:
 ![architecture.png](https://github.com/shivendrra/enigma-1.5b/blob/main/architecture.png)
 
-EnBERT is a 47million model, follows decoder-only architecture, whereas Engima-2.5b is a transformer model. It has a fairly complex model.
+EnBERT is a 430m model, follows decoder-only architecture trained on base level tokens, whereas Enigma is a transformer based model with 750m parameters trained on k-mer sequences with a fairly large vocab size. It has a fairly complex model.
 ### Highlights
----
 1. **Positional Embeddings:** Enigma model has positional embeddings added to the token embeddings in the start of all the processing, on the other hand, decoder-only model doesn't uses positional encodings in the start, it applies it in attention head to each attention matrix individually.
 2. **RMS Normalization & Pre-normalization:** Both of the model uses RMS normalization same as implemented in LLaMa-2 and uses pre-normalization for model's stability while training.
 3. **Self-Attention Layer:** Single headed attention layers have relative positional embeddings added to the attention matrix before masking. Masking is only done to first attention layer. Key, Query and Value matrices have biases added to them. `MultiHeadAttention` Layer concatenates all the outputs from each of the attention heads together.
