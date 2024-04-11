@@ -24,13 +24,18 @@ self.index_to_string = {i: ch for i, ch in enumerate(self.chars)}
 ```
 
 ### K-Mer Tokenization
-### K-Mer Tokenization
 Let's say we have a long sequence of DNA. This tokenizer splits that sequence into sections of consecutively occurring bases, and each section has length of value equal to `k_mer` which is by default set to 4. This way, the vocab formed will be equal to `k_mers^(no. of unique characters)`
-	since we have, 5 unique characters,  so, for 
-		k_mers = 2, vocab_size = 25	
-		k_mers = 3, vocab_size = 125	
-		k_mers = 4, vocab_size = 625
-		k_mers = 5, vocab_size = 3125
+	
+since we have, 5 unique characters,  so, for 
+	
+k_mers = 2, vocab_size = 25	
+
+k_mers = 3, vocab_size = 125	
+
+k_mers = 4, vocab_size = 625
+
+k_mers = 5, vocab_size = 3125
+
 `build_vocab()` function then builds a vocab out of all tokenized sequences by storing them into a new dictionary, seq as key and index as value. And finally, you can save the generated vocab using `save_model()` function and can be loaded later for use.
 ```python
 tokenizer.load_model('../tokenizer/trained models/base_5k.json')
